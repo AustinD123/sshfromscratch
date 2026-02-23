@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::cout << "[client] connected, sending command: " << command << "\n";
+    std::cout << "[client] sending command: " << command << "\n";
     ssize_t sent = send(sock_fd, command.c_str(), command.size(), 0);
     if (sent < 0) {
         std::perror("send");
@@ -43,7 +43,28 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::cout << "[client] sent bytes=" << sent << "\n";
+    char buf[4096];
+    while (true) {
+        ssize_t n = recv(sock_fd, buf, sizeof(buf), 0);
+        if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            std::perror("recv");
+            close(sock_fd);
+            return 1;
+        }
+        if (n == 0) {
+            break;
+        }
+        ssize_t w = write(STDOUT_FILENO, buf, static_cast<size_t>(n));
+        if (w < 0) {
+            std::perror("write");
+            close(sock_fd);
+            return 1;
+        }
+    }
+
     close(sock_fd);
     return 0;
 }
