@@ -9,7 +9,6 @@
 
 namespace {
 constexpr int kPort = 5000;
-
 int g_listen_fd = -1;
 
 void handle_signal(int) {
@@ -55,10 +54,50 @@ int main() {
         return 1;
     }
 
-    std::cout << "[server] listening on 0.0.0.0:" << kPort << " (Step 1: socket/bind/listen only)\n";
-    std::cout << "[server] press Ctrl+C to exit\n";
+    std::cout << "[server] listening on 0.0.0.0:" << kPort << " (Step 4: accept + recv)\n";
 
     while (true) {
-        pause();
+        sockaddr_in client_addr{};
+        socklen_t client_len = sizeof(client_addr);
+
+        int conn_fd = accept(g_listen_fd, reinterpret_cast<sockaddr*>(&client_addr), &client_len);
+        if (conn_fd < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            std::perror("accept");
+            break;
+        }
+
+        char client_ip[INET_ADDRSTRLEN] = {};
+        if (inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip)) == nullptr) {
+            std::snprintf(client_ip, sizeof(client_ip), "%s", "<ntop_fail>");
+        }
+
+        std::cout << "[server] accepted fd=" << conn_fd << " from "
+                  << client_ip << ":" << ntohs(client_addr.sin_port) << "\n";
+
+        char recv_buf[4096];
+        ssize_t n = recv(conn_fd, recv_buf, sizeof(recv_buf) - 1, 0);
+        if (n < 0) {
+            std::perror("recv");
+            close(conn_fd);
+            continue;
+        }
+
+        if (n == 0) {
+            std::cout << "[server] recv returned 0 (peer closed)\n";
+            close(conn_fd);
+            continue;
+        }
+
+        recv_buf[n] = '\0';
+        std::cout << "[server] recv bytes=" << n << " data=\"" << recv_buf << "\"\n";
+
+        close(conn_fd);
     }
+
+    close(g_listen_fd);
+    g_listen_fd = -1;
+    return 0;
 }
